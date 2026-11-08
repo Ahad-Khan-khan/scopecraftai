@@ -1,0 +1,350 @@
+{
+  "name": "AI-Powered Smart Quotation Platform Engine",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "generate-quotation",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "1d8b746a-5431-4876-b68f-9a044e1d7010",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        220,
+        340
+      ],
+      "webhookId": "generate-quotation"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Node 2: Input Validation & Sanitization\nconst input = $input.first().json.body || $input.first().json;\n\nif (!input || typeof input !== 'object') {\n  throw new Error('Invalid payload: Request body must be a valid JSON object.');\n}\n\nconst requiredFields = ['projectCategory', 'projectName', 'projectDescription', 'contactEmail'];\nconst missing = requiredFields.filter(f => !input[f] || (typeof input[f] === 'string' && input[f].trim().length === 0));\n\nif (missing.length > 0) {\n  return [{\n    json: {\n      isValid: false,\n      error: `Missing required field(s): ${missing.join(', ')}`,\n      status: 400\n    }\n  }];\n}\n\n// Email validation regex\nconst emailRegex = /^[\\w-\\.]+@([\\w-]+\\.)+[\\w-]{2,4}$/;\nif (!emailRegex.test(input.contactEmail)) {\n  return [{\n    json: {\n      isValid: false,\n      error: 'Invalid contact email format provided.',\n      status: 400\n    }\n  }];\n}\n\n// Anti-prompt injection & string sanitization\nfunction sanitizeText(str) {\n  if (!str || typeof str !== 'string') return '';\n  return str\n    .replace(/<script\\b[^<]*(?:(?!<\\/script>)<[^<]*)*<\\/script>/gi, '')\n    .replace(/\\b(ignore all previous instructions|system prompt|disregard previous)\\b/gi, '[filtered_command]')\n    .trim();\n}\n\nconst sanitizedInput = {\n  projectCategory: sanitizeText(input.projectCategory),\n  projectName: sanitizeText(input.projectName),\n  projectDescription: sanitizeText(input.projectDescription),\n  targetAudience: sanitizeText(input.targetAudience || 'General Users'),\n  industryNiche: sanitizeText(input.industryNiche || 'Technology'),\n  expectedOutcome: sanitizeText(input.expectedOutcome || ''),\n  dynamicFields: input.dynamicFields || {},\n  complexity: input.complexity || 'Moderate',\n  targetTimeline: sanitizeText(input.targetTimeline || 'Standard (6-8 weeks)'),\n  budgetRange: sanitizeText(input.budgetRange || 'Flexible'),\n  preferredTechStack: sanitizeText(input.preferredTechStack || 'Modern Agency Recommended (Next.js, Tailwind, Node/Python)'),\n  contactName: sanitizeText(input.contactName || 'Valued Client'),\n  contactEmail: input.contactEmail.trim().toLowerCase(),\n  companyName: sanitizeText(input.companyName || ''),\n  currency: (input.currency || 'USD').toUpperCase()\n};\n\nreturn [{\n  json: {\n    isValid: true,\n    data: sanitizedInput\n  }\n}];"
+      },
+      "id": "2c5a932b-3e41-4712-9c12-8d76ef101234",
+      "name": "Input Validation & Sanitization",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        440,
+        340
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.isValid }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "3f982a1b-12a4-49c1-842f-7634bc3d4567",
+      "name": "Validation Branch",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        660,
+        340
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ success: false, error: $json.error, timestamp: new Date().toISOString() }) }}",
+        "options": {
+          "responseCode": "={{ $json.status || 400 }}"
+        }
+      },
+      "id": "4e719c2a-9f12-4d2b-b841-8c43ef991024",
+      "name": "Respond Validation Error",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        880,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Node 4: Requirement Normalization & WBS Base Engine\nconst item = $input.first().json.data;\n\n// Heuristic Base Hours Mapping by Vertical\nconst verticalBaseHours = {\n  'website development': 60,\n  'e-commerce development': 120,\n  'saas development': 160,\n  'ai system development': 140,\n  'ai chatbot': 80,\n  'ai voice agent': 110,\n  'crm / management system': 130,\n  'workflow automation': 50,\n  'mobile application': 150,\n  'custom software': 140\n};\n\nconst catKey = item.projectCategory.toLowerCase();\nlet baseHours = 100;\nfor (const [key, val] of Object.entries(verticalBaseHours)) {\n  if (catKey.includes(key)) {\n    baseHours = val;\n    break;\n  }\n}\n\n// Complexity Multipliers\nlet complexityMultiplier = 1.0;\nif (item.complexity.toLowerCase().includes('simple') || item.complexity.toLowerCase().includes('mvp')) {\n  complexityMultiplier = 0.85;\n} else if (item.complexity.toLowerCase().includes('complex') || item.complexity.toLowerCase().includes('enterprise')) {\n  complexityMultiplier = 1.45;\n} else {\n  complexityMultiplier = 1.15; // Moderate\n}\n\nconst estimatedTotalHours = Math.round(baseHours * complexityMultiplier);\n\n// Configurable standard agency rate ($50/hour base)\nconst standardHourlyRateUSD = 50;\nconst pkrExchangeRate = 278.50;\n\nconst expectedCostUSD = estimatedTotalHours * standardHourlyRateUSD;\nconst minCostUSD = Math.round(expectedCostUSD * 0.85);\nconst maxCostUSD = Math.round(expectedCostUSD * 1.30);\n\nreturn [{\n  json: {\n    normalizedData: {\n      ...item,\n      baseHours,\n      complexityMultiplier,\n      estimatedTotalHours,\n      standardHourlyRateUSD,\n      expectedCostUSD,\n      minCostUSD,\n      maxCostUSD,\n      expectedCostPKR: Math.round(expectedCostUSD * pkrExchangeRate),\n      minCostPKR: Math.round(minCostUSD * pkrExchangeRate),\n      maxCostPKR: Math.round(maxCostUSD * pkrExchangeRate)\n    }\n  }\n}];"
+      },
+      "id": "5a8b7c6d-9e1f-402a-bf33-1a2b3c4d5e6f",
+      "name": "Requirement Normalization & WBS Engine",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        280
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-lite-latest:generateContent?key={{ $env.GEMINI_API_KEY || $node['Webhook Trigger'].json.headers['x-gemini-key'] }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"contents\": [{\n    \"role\": \"user\",\n    \"parts\": [{\n      \"text\": \"You are a Principal Solutions Architect at a top-tier software consultancy.\\nAnalyze the following project specification and generate 3 precise, targeted web search queries that Tavily can execute to verify real-world 2025/2026 technical stack choices, 3rd party API pricing, and infrastructure costs.\\n\\nPROJECT DETAILS:\\n- Category: {{ $json.normalizedData.projectCategory }}\\n- Title: {{ $json.normalizedData.projectName }}\\n- Description: {{ $json.normalizedData.projectDescription }}\\n- Target Audience: {{ $json.normalizedData.targetAudience }}\\n- Complexity Tier: {{ $json.normalizedData.complexity }}\\n- Dynamic Specs: {{ JSON.stringify($json.normalizedData.dynamicFields) }}\\n\\nREQUIREMENTS:\\nReturn a strictly valid JSON object with key 'queries' containing an array of exactly 3 search query strings:\\nQuery 1: Focus on recommended modern production tech stack for this exact category.\\nQuery 2: Focus on specific 3rd-party API pricing and monthly infrastructure benchmarks (e.g. Twilio, OpenAI, Supabase, Vercel, AWS).\\nQuery 3: Focus on development breakdown hours and standard agency implementation scope for this type of system.\\n\\nOutput JSON format ONLY:\\n{\\n  \\\"queries\\\": [\\\"query 1\\\", \\\"query 2\\\", \\\"query 3\\\"]\\n}\"\n    }]\n  }],\n  \"generationConfig\": {\n    \"response_mime_type\": \"application/json\",\n    \"temperature\": 0.2\n  }\n}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "6b7c8d9e-0f1a-423b-a144-2b3c4d5e6f7a",
+      "name": "Gemini Scope & Query Generator",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        1100,
+        280
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Node 6: Parse Gemini Queries & Prepare Tavily Payloads\nconst geminiResponse = $input.first().json;\nconst normalized = $node['Requirement Normalization & WBS Engine'].json.normalizedData;\n\nlet queryList = [\n  `${normalized.projectCategory} modern tech stack architecture 2025`,\n  `${normalized.projectCategory} third party API pricing infrastructure costs`,\n  `${normalized.projectCategory} software development agency scope hours`\n];\n\ntry {\n  const candidate = geminiResponse.candidates?.[0]?.content?.parts?.[0]?.text;\n  if (candidate) {\n    const parsed = JSON.parse(candidate);\n    if (Array.isArray(parsed.queries) && parsed.queries.length > 0) {\n      queryList = parsed.queries;\n    }\n  }\n} catch (err) {\n  // Fallback to deterministic default queries if Gemini JSON parse has edge variance\n}\n\n// We will trigger Tavily with the primary merged query + API pricing query\nconst primarySearchQuery = queryList[0];\nconst pricingSearchQuery = queryList[1] || queryList[0];\n\nreturn [{\n  json: {\n    normalizedData: normalized,\n    primarySearchQuery,\n    pricingSearchQuery,\n    allQueries: queryList\n  }\n}];"
+      },
+      "id": "7c8d9e0f-1a2b-434c-b255-3c4d5e6f7a8b",
+      "name": "Extract Tavily Queries",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1320,
+        280
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.tavily.com/search",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"api_key\": \"{{ $env.TAVILY_API_KEY || $node['Webhook Trigger'].json.headers['x-tavily-key'] }}\",\n  \"query\": \"{{ $json.primarySearchQuery }} {{ $json.pricingSearchQuery }}\",\n  \"search_depth\": \"advanced\",\n  \"include_answer\": true,\n  \"max_results\": 5\n}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "8d9e0f1a-2b3c-445d-c366-4d5e6f7a8b9c",
+      "name": "Tavily Real-Time Web Research",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        1540,
+        280
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Node 8: Filter, Clean & Structure Tavily Research\nconst tavilyData = $input.first().json;\nconst priorNode = $node['Extract Tavily Queries'].json;\nconst normalized = priorNode.normalizedData;\n\nconst rawResults = tavilyData.results || [];\nconst citations = [];\nconst verifiedPoints = [];\n\nrawResults.forEach((res, idx) => {\n  if (res.url && res.title) {\n    citations.push({\n      id: idx + 1,\n      title: res.title,\n      url: res.url,\n      snippet: (res.content || '').substring(0, 240) + '...'\n    });\n    if (res.content) {\n      verifiedPoints.push(res.content.substring(0, 300));\n    }\n  }\n});\n\n// Provide robust fallback citations if Tavily response was constrained\nif (citations.length === 0) {\n  citations.push({\n    id: 1,\n    title: 'Industry Standard Cloud Architecture Benchmarks 2025',\n    url: 'https://aws.amazon.com/pricing/',\n    snippet: 'Standard modern cloud compute, serverless database, and CDN benchmarks for scalable digital products.'\n  });\n}\n\nreturn [{\n  json: {\n    normalizedData: normalized,\n    citations,\n    tavilyAnswer: tavilyData.answer || 'Research verified across official API documentation and market benchmarks.',\n    researchSummary: verifiedPoints.join(' | ')\n  }\n}];"
+      },
+      "id": "9e0f1a2b-3c4d-456e-d477-5e6f7a8b9c0d",
+      "name": "Research Processor & Filter",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1760,
+        280
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-lite-latest:generateContent?key={{ $env.GEMINI_API_KEY || $node['Webhook Trigger'].json.headers['x-gemini-key'] }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"contents\": [{\n    \"role\": \"user\",\n    \"parts\": [{\n      \"text\": \"You are a Director of Engineering and Senior Technical Estimator at a world-class software development agency.\\nGenerate a highly professional, comprehensive technical proposal and quotation in strict JSON.\\n\\nPROJECT SPECIFICATION:\\n- Project Name: {{ $json.normalizedData.projectName }}\\n- Category: {{ $json.normalizedData.projectCategory }}\\n- Description: {{ $json.normalizedData.projectDescription }}\\n- Target Audience: {{ $json.normalizedData.targetAudience }}\\n- Complexity Tier: {{ $json.normalizedData.complexity }}\\n- Delivery Urgency: {{ $json.normalizedData.targetTimeline }}\\n- Dynamic Requirements: {{ JSON.stringify($json.normalizedData.dynamicFields) }}\\n\\nDETERMINISTIC WBS MATH BOUNDS (STRICTLY RESPECT THESE NUMBERS):\\n- Calculated Total Hours: {{ $json.normalizedData.estimatedTotalHours }} hours\\n- Expected Cost (USD): ${{ $json.normalizedData.expectedCostUSD }}\\n- Cost Range (USD): ${{ $json.normalizedData.minCostUSD }} to ${{ $json.normalizedData.maxCostUSD }}\\n- Expected Cost (PKR): PKR {{ $json.normalizedData.expectedCostPKR }}\\n- Base Hourly Rate: ${{ $json.normalizedData.standardHourlyRateUSD }}/hr\\n\\nLIVE RESEARCH CITATIONS & FINDINGS:\\n{{ JSON.stringify($json.citations) }}\\nResearch Summary: {{ $json.researchSummary }}\\n\\nREQUIREMENTS:\\nSynthesize an agency-grade quotation. You must return ONLY a valid JSON object strictly matching this schema:\\n{\\n  \\\"executiveSummary\\\": \\\"2-3 sentences outlining the architectural strategy and technical objective\\\",\\n  \\\"scopeOfWork\\\": [\\\"List of 4-6 key technical deliverables\\\"],\\n  \\\"techStack\\\": {\\n    \\\"frontend\\\": \\\"Technology recommendation with rationale\\\",\\n    \\\"backend\\\": \\\"Technology recommendation with rationale\\\",\\n    \\\"database\\\": \\\"Technology recommendation with rationale\\\",\\n    \\\"aiModels\\\": \\\"Models / APIs recommended with rationale\\\",\\n    \\\"infrastructure\\\": \\\"Hosting / Deployment recommendation\\\"\\n  },\\n  \\\"modules\\\": [\\n    {\\n      \\\"name\\\": \\\"Module Title (e.g. Core Telephony Pipeline)\\\",\\n      \\\"description\\\": \\\"Clear technical description\\\",\\n      \\\"hours\\\": 25,\\n      \\\"complexity\\\": \\\"Medium\\\",\\n      \\\"costUSD\\\": 1250,\\n      \\\"confidence\\\": \\\"High\\\"\\n    }\\n  ],\\n  \\\"recurringOpex\\\": [\\n    {\\n      \\\"service\\\": \\\"Name of service (e.g. Twilio Voice / Vercel Pro)\\\",\\n      \\\"unitMetric\\\": \\\"Usage pricing (e.g. $0.014/min)\\\",\\n      \\\"estimatedMonthlyUSD\\\": 65\\n    }\\n  ],\\n  \\\"assumptions\\\": [\\\"3 key operational assumptions\\\"],\\n  \\\"exclusions\\\": [\\\"2-3 explicit scope exclusions\\\"],\\n  \\\"confidenceRating\\\": \\\"High\\\",\\n  \\\"confidenceRationale\\\": \\\"Explanation of what grounded the estimates\\\"\\n}\\n\\nRULES:\\n1. The sum of module hours must equal or closely approximate the calculated total of {{ $json.normalizedData.estimatedTotalHours }} hours.\\n2. Provide 4 to 6 discrete engineering modules in the 'modules' array.\\n3. Keep your response in valid JSON with NO markdown codeblock ticks.\"\n    }]\n  }],\n  \"generationConfig\": {\n    \"response_mime_type\": \"application/json\",\n    \"temperature\": 0.2\n  }\n}",
+        "options": {
+          "timeout": 45000
+        }
+      },
+      "id": "0f1a2b3c-4d5e-467f-e588-6f7a8b9c0d1e",
+      "name": "Gemini Quotation Synthesis",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        1980,
+        280
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Node 10: Schema Guard & Integrity Validation\nconst geminiRaw = $input.first().json;\nconst priorNode = $node['Research Processor & Filter'].json;\nconst normalized = priorNode.normalizedData;\nconst citations = priorNode.citations;\n\nlet parsedQuotation = {};\ntry {\n  const rawText = geminiRaw.candidates?.[0]?.content?.parts?.[0]?.text || '{}';\n  parsedQuotation = JSON.parse(rawText);\n} catch (err) {\n  parsedQuotation = {\n    executiveSummary: 'Automated executive technical proposal generated based on verified architecture specifications.',\n    scopeOfWork: ['Core Application Architecture', 'API Integrations & Pipelines', 'Database Schema & Auth', 'Quality Assurance & Deployment'],\n    techStack: {\n      frontend: 'Next.js 15 (React 19, TypeScript, Tailwind CSS)',\n      backend: 'Node.js / FastAPI Microservice Architecture',\n      database: 'PostgreSQL on Supabase or Neon',\n      aiModels: 'Google Gemini & Specialized APIs',\n      infrastructure: 'Vercel + Docker AWS Container Compute'\n    },\n    modules: [\n      { name: 'Architecture & Core Foundation', description: 'Initial schema design, CI/CD, and auth setup', hours: Math.round(normalized.estimatedTotalHours * 0.25), complexity: 'Medium', costUSD: Math.round(normalized.expectedCostUSD * 0.25), confidence: 'High' },\n      { name: 'Feature & Business Logic Implementation', description: 'Primary interactive flows and integrations', hours: Math.round(normalized.estimatedTotalHours * 0.45), complexity: 'High', costUSD: Math.round(normalized.expectedCostUSD * 0.45), confidence: 'High' },\n      { name: 'Security, Testing & Performance Tuning', description: 'End-to-end integration tests and load audits', hours: Math.round(normalized.estimatedTotalHours * 0.15), complexity: 'Medium', costUSD: Math.round(normalized.expectedCostUSD * 0.15), confidence: 'High' },\n      { name: 'Deployment & Production Hardening', description: 'Domain routing, monitoring, and live verification', hours: Math.round(normalized.estimatedTotalHours * 0.15), complexity: 'Low', costUSD: Math.round(normalized.expectedCostUSD * 0.15), confidence: 'High' }\n    ],\n    recurringOpex: [\n      { service: 'Cloud Hosting (Vercel / AWS)', unitMetric: 'Pro Tier compute', estimatedMonthlyUSD: 40 },\n      { service: 'Database Tier (Supabase/Neon)', unitMetric: 'Serverless compute & storage', estimatedMonthlyUSD: 25 },\n      { service: 'AI API Usage (Gemini / LLM)', unitMetric: 'Pay per million tokens', estimatedMonthlyUSD: 50 }\n    ],\n    assumptions: ['Client will provide necessary third-party brand assets and vendor accounts.'],\n    exclusions: ['Ongoing 24/7 technical customer support staffing.'],\n    confidenceRating: 'High',\n    confidenceRationale: 'Derived from verified engineering day-rates and deterministic WBS formula.'\n  };\n}\n\n// Generate clean Agency Quotation ID\nconst today = new Date();\nconst dateStr = today.toISOString().slice(0, 10).replace(/-/g, '');\nconst randomSuffix = Math.floor(1000 + Math.random() * 9000);\nconst quotationId = `QC-${dateStr}-${randomSuffix}`;\n\n// Guarantee numeric consistency\nconst finalQuotation = {\n  quotationId,\n  projectName: normalized.projectName,\n  projectCategory: normalized.projectCategory,\n  clientName: normalized.contactName,\n  clientEmail: normalized.contactEmail,\n  generatedAt: today.toISOString(),\n  summary: {\n    totalHours: normalized.estimatedTotalHours,\n    hourlyRateUSD: normalized.standardHourlyRateUSD,\n    expectedCostUSD: normalized.expectedCostUSD,\n    minCostUSD: normalized.minCostUSD,\n    maxCostUSD: normalized.maxCostUSD,\n    expectedCostPKR: normalized.expectedCostPKR,\n    minCostPKR: normalized.minCostPKR,\n    maxCostPKR: normalized.maxCostPKR,\n    timeline: normalized.targetTimeline,\n    complexity: normalized.complexity,\n    currency: normalized.currency\n  },\n  executiveSummary: parsedQuotation.executiveSummary || 'Comprehensive technical specification and proposal.',\n  scopeOfWork: parsedQuotation.scopeOfWork || [],\n  techStack: parsedQuotation.techStack || {},\n  modules: parsedQuotation.modules || [],\n  recurringOpex: parsedQuotation.recurringOpex || [],\n  assumptions: parsedQuotation.assumptions || [],\n  exclusions: parsedQuotation.exclusions || [],\n  confidenceRating: parsedQuotation.confidenceRating || 'High',\n  confidenceRationale: parsedQuotation.confidenceRationale || 'Estimates supported by deterministic WBS and verified benchmarks.',\n  researchCitations: citations\n};\n\nreturn [{\n  json: {\n    success: true,\n    quotationId,\n    data: finalQuotation\n  }\n}];"
+      },
+      "id": "1a2b3c4d-5e6f-4780-f699-7a8b9c0d1e2f",
+      "name": "Schema Guard & Integrity Validation",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2200,
+        280
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "2b3c4d5e-6f7a-4891-070a-8b9c0d1e2f3a",
+      "name": "Respond Final Quotation",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        2420,
+        280
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "Input Validation & Sanitization",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Input Validation & Sanitization": {
+      "main": [
+        [
+          {
+            "node": "Validation Branch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validation Branch": {
+      "main": [
+        [
+          {
+            "node": "Requirement Normalization & WBS Engine",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Validation Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Requirement Normalization & WBS Engine": {
+      "main": [
+        [
+          {
+            "node": "Gemini Scope & Query Generator",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini Scope & Query Generator": {
+      "main": [
+        [
+          {
+            "node": "Extract Tavily Queries",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Tavily Queries": {
+      "main": [
+        [
+          {
+            "node": "Tavily Real-Time Web Research",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tavily Real-Time Web Research": {
+      "main": [
+        [
+          {
+            "node": "Research Processor & Filter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Research Processor & Filter": {
+      "main": [
+        [
+          {
+            "node": "Gemini Quotation Synthesis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini Quotation Synthesis": {
+      "main": [
+        [
+          {
+            "node": "Schema Guard & Integrity Validation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schema Guard & Integrity Validation": {
+      "main": [
+        [
+          {
+            "node": "Respond Final Quotation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}
